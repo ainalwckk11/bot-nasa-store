@@ -2,6 +2,8 @@ const { Telegraf, Scenes, session } = require('telegraf');
 const config = require('./config');
 const { ownerOnly } = require('./bot/middleware');
 const buyScene = require('./bot/scenes/buyScene');
+const transactionPoller = require('./utils/transactionPoller');
+const transactionStore = require('./utils/transactionStore');
 
 // ======== Inisialisasi Bot ========
 const bot = new Telegraf(config.botToken);
@@ -21,6 +23,10 @@ require('./bot/commands/product')(bot);
 require('./bot/commands/search')(bot);
 require('./bot/commands/sku')(bot);
 require('./bot/commands/buy')(bot);
+require('./bot/commands/cektrx')(bot);
+
+// ======== Transaction Poller ========
+transactionPoller.setBotInstance(bot);
 
 // ======== Handle pesan teks biasa ========
 bot.on('text', async (ctx) => {
@@ -35,7 +41,8 @@ bot.on('text', async (ctx) => {
     '📦 /product — Daftar produk\n' +
     '🔍 /search <nama> — Cari produk\n' +
     '🏷️ /sku <kode> — Detail produk\n' +
-    '🛒 /buy — Beli produk'
+    '🛒 /buy — Beli produk\n' +
+    '🔍 /cektrx <ref_id> — Cek transaksi'
   );
 });
 
@@ -50,13 +57,22 @@ bot.catch((err, ctx) => {
   }
 });
 
+// ======== Noop action (untuk tombol page indicator) ========
+bot.action('noop', async (ctx) => {
+  await ctx.answerCbQuery();
+});
+
 // ======== Graceful Stop ========
 process.once('SIGINT', () => {
   console.log('\n🛑 Bot dihentikan (SIGINT)');
+  transactionPoller.stopAll();
+  transactionStore.destroy();
   bot.stop('SIGINT');
 });
 process.once('SIGTERM', () => {
   console.log('\n🛑 Bot dihentikan (SIGTERM)');
+  transactionPoller.stopAll();
+  transactionStore.destroy();
   bot.stop('SIGTERM');
 });
 
@@ -79,6 +95,7 @@ async function main() {
       { command: 'search', description: '🔍 Cari produk' },
       { command: 'sku', description: '🏷️ Detail produk by SKU' },
       { command: 'buy', description: '🛒 Beli produk' },
+      { command: 'cektrx', description: '🔍 Cek status transaksi' },
     ]);
 
     await bot.launch();

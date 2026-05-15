@@ -15,7 +15,7 @@ const api = axios.create({
  */
 async function checkBalance() {
   try {
-    const sign = md5(config.digiUsername + config.digiApiKey + 'depifit');
+    const sign = md5(config.digiUsername + config.digiApiKey + 'depo');
 
     const response = await api.post('/cek-saldo', {
       cmd: 'deposit',
@@ -178,14 +178,101 @@ async function getBrandsByCategory(category, cmd = 'prepaid') {
 }
 
 /**
- * Ambil produk berdasarkan brand
+ * Ambil produk berdasarkan brand (hanya aktif, urut harga)
  * @param {string} brand
  * @param {string} cmd
  * @returns {Promise<Array>}
  */
 async function getProductsByBrand(brand, cmd = 'prepaid') {
   const products = await getPriceList(cmd);
-  return products.filter((p) => p.brand === brand);
+  return products
+    .filter((p) => p.brand === brand && p.buyer_product_status && p.seller_product_status)
+    .sort((a, b) => (a.price || 0) - (b.price || 0));
+}
+
+/**
+ * Ambil daftar tipe/sub-kategori unik berdasarkan brand
+ * @param {string} brand
+ * @param {string} cmd
+ * @returns {Promise<Array<string>>}
+ */
+async function getTypesByBrand(brand, cmd = 'prepaid') {
+  const products = await getPriceList(cmd);
+  const types = [
+    ...new Set(
+      products
+        .filter((p) => p.brand === brand && p.buyer_product_status && p.seller_product_status)
+        .map((p) => p.type || 'Umum')
+        .filter(Boolean)
+    ),
+  ];
+  return types.sort();
+}
+
+/**
+ * Ambil produk berdasarkan brand DAN type (hanya aktif, urut harga)
+ * @param {string} brand
+ * @param {string} type
+ * @param {string} cmd
+ * @returns {Promise<Array>}
+ */
+async function getProductsByBrandAndType(brand, type, cmd = 'prepaid') {
+  const products = await getPriceList(cmd);
+  return products
+    .filter((p) => {
+      const productType = p.type || 'Umum';
+      return (
+        p.brand === brand &&
+        productType === type &&
+        p.buyer_product_status &&
+        p.seller_product_status
+      );
+    })
+    .sort((a, b) => (a.price || 0) - (b.price || 0));
+}
+
+/**
+ * Cek status transaksi prepaid
+ * Mengirim ulang request transaksi dengan ref_id yang sama
+ * Digiflazz akan mengembalikan status tanpa membuat transaksi baru
+ * @param {string} buyerSkuCode - kode SKU produk
+ * @param {string} customerNo - nomor tujuan
+ * @param {string} refId - ID referensi yang sama dengan transaksi asli
+ * @returns {Promise<object>} status transaksi
+ */
+async function checkTransactionStatus(buyerSkuCode, customerNo, refId) {
+  try {
+    const sign = md5(config.digiUsername + config.digiApiKey + refId);
+
+    const payload = {
+      username: config.digiUsername,
+      buyer_sku_code: buyerSkuCode,
+      customer_no: customerNo,
+      ref_id: refId,
+      sign,
+    };
+
+    if (config.digiTesting) {
+      payload.testing = true;
+    }
+
+    const response = await api.post('/transaction', payload);
+
+    if (response.data && response.data.data) {
+      return response.data.data;
+    }
+
+    throw new Error('Format response tidak valid');
+  } catch (error) {
+    if (error.response && error.response.data) {
+      const errData = error.response.data.data;
+      if (errData) {
+        return errData; // Return data status transaksi
+      }
+      throw new Error(`Digiflazz Error: ${error.response.statusText}`);
+    }
+    throw error;
+  }
 }
 
 module.exports = {
@@ -197,4 +284,7 @@ module.exports = {
   getCategories,
   getBrandsByCategory,
   getProductsByBrand,
+  getTypesByBrand,
+  getProductsByBrandAndType,
+  checkTransactionStatus,
 };

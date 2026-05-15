@@ -17,6 +17,7 @@ module.exports = (bot) => {
         `🔍 /search \\<nama\\> — Cari produk\n` +
         `🏷️ /sku \\<kode\\> — Detail produk\n` +
         `🛒 /buy — Beli produk\n` +
+        `🔍 /cektrx \\<ref\\_id\\> — Cek transaksi\n` +
         `━━━━━━━━━━━━━━━━━━━━`;
 
       await ctx.reply(welcomeMsg, {
@@ -80,6 +81,7 @@ module.exports = (bot) => {
       `🔍 /search \\<nama\\> — Cari produk\n` +
       `🏷️ /sku \\<kode\\> — Detail produk\n` +
       `🛒 /buy — Beli produk\n` +
+      `🔍 /cektrx \\<ref\\_id\\> — Cek transaksi\n` +
       `━━━━━━━━━━━━━━━━━━━━`;
 
     await ctx.editMessageText(welcomeMsg, {

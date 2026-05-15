@@ -1,6 +1,9 @@
 const { Scenes, Markup } = require('telegraf');
 const digiflazz = require('../../api/digiflazz');
 const { formatCurrency, formatTransaction, formatProduct, generateRefId } = require('../../utils/formatter');
+const { validateNickname, isNicknameSupported } = require('../../api/nicknameChecker');
+const transactionStore = require('../../utils/transactionStore');
+const transactionPoller = require('../../utils/transactionPoller');
 
 // ============================================================
 // Konfigurasi input per game/produk
@@ -368,6 +371,53 @@ const buyScene = new Scenes.WizardScene(
     const customerNo = inputConfig.formatTarget(ctx.wizard.state.collectedInputs);
     ctx.wizard.state.customerNo = customerNo;
 
+    // ============================================================
+    // NICKNAME VALIDATION (jika game mendukung)
+    // ============================================================
+    if (inputConfig.id !== 'default' && isNicknameSupported(inputConfig.id)) {
+      try {
+        const validatingMsg = await ctx.reply('🔍 Memvalidasi akun game...');
+
+        const nicknameResult = await validateNickname(inputConfig.id, ctx.wizard.state.collectedInputs);
+
+        if (nicknameResult.success && nicknameResult.nickname) {
+          // Nickname ditemukan → simpan dan tampilkan
+          ctx.wizard.state.nickname = nicknameResult.nickname;
+
+          await ctx.telegram.editMessageText(
+            ctx.chat.id,
+            validatingMsg.message_id,
+            null,
+            `✅ Nickname found:\n` +
+            `*${nicknameResult.nickname}*\n\n` +
+            `Continue purchase?`,
+            { parse_mode: 'Markdown' }
+          );
+        } else if (nicknameResult.supported) {
+          // API mendukung tapi nickname tidak ditemukan (bisa karena API down, timeout, atau invalid ID)
+          await ctx.telegram.editMessageText(
+            ctx.chat.id,
+            validatingMsg.message_id,
+            null,
+            `⚠️ *Nickname validation unavailable.*\n\n` +
+            `API checker mungkin sedang gangguan (down/timeout) atau ID tidak ditemukan.\n` +
+            `Continue transaction?`,
+            { parse_mode: 'Markdown' }
+          );
+        } else {
+          // API tidak mendukung atau gagal → hapus pesan validasi
+          try {
+            await ctx.telegram.deleteMessage(ctx.chat.id, validatingMsg.message_id);
+          } catch {
+            // Ignore delete error
+          }
+        }
+      } catch (error) {
+        console.error('Error validasi nickname:', error);
+        // Gracefully skip validasi
+      }
+    }
+
     // Tampilkan konfirmasi
     return showConfirmation(ctx);
   }
@@ -375,7 +425,7 @@ const buyScene = new Scenes.WizardScene(
 
 // ======== Konfirmasi Pembelian ========
 async function showConfirmation(ctx) {
-  const { product, customerNo, sku, inputConfig, collectedInputs } = ctx.wizard.state;
+  const { product, customerNo, sku, inputConfig, collectedInputs, nickname } = ctx.wizard.state;
 
   let msg = `🛒 *KONFIRMASI PEMBELIAN*\n━━━━━━━━━━━━━━━━━━━━\n\n`;
   msg += `📦 Produk: *${product.product_name}*\n`;
@@ -388,6 +438,11 @@ async function showConfirmation(ctx) {
     }
   } else {
     msg += `📱 Tujuan: \`${customerNo}\`\n`;
+  }
+
+  // Tampilkan nickname jika tersedia
+  if (nickname) {
+    msg += `👤 Nickname: *${nickname}*\n`;
   }
 
   msg += `💰 Harga: *${formatCurrency(product.price)}*\n\n`;
@@ -421,16 +476,55 @@ buyScene.action('confirm_buy', async (ctx) => {
     );
 
     const result = await digiflazz.createTransaction(sku, customerNo, refId);
-    const msg = formatTransaction(result);
 
-    await ctx.reply(msg, {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('💳 Cek Saldo', 'cmd_balance')],
-        [Markup.button.callback('🛒 Beli Lagi', 'cmd_buy')],
-        [Markup.button.callback('🏠 Menu Utama', 'cmd_start')],
-      ]),
+    // Simpan ke transaction store
+    transactionStore.save(refId, {
+      sku,
+      customerNo,
+      product: {
+        product_name: product.product_name,
+        price: product.price,
+        buyer_sku_code: product.buyer_sku_code,
+      },
+      chatId: ctx.chat.id,
+      lastStatus: result?.status || 'Pending',
+      result,
     });
+
+    const status = result?.status;
+
+    if (status === 'Pending') {
+      // Transaksi masih pending → kirim pesan processing dan mulai polling
+      const processingMsg = await ctx.reply(
+        `⏳ *TRANSAKSI SEDANG DIPROSES*\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `📦 Produk: ${product.product_name}\n` +
+        `📱 Tujuan: \`${customerNo}\`\n` +
+        `🔖 Ref ID: \`${refId}\`\n\n` +
+        `Status akan diperbarui otomatis...\n` +
+        `Atau cek manual: \`/cektrx ${refId}\``,
+        { parse_mode: 'Markdown' }
+      );
+
+      // Mulai auto-polling
+      transactionPoller.startPolling(refId, {
+        sku,
+        customerNo,
+        chatId: ctx.chat.id,
+        messageId: processingMsg.message_id,
+      });
+    } else {
+      // Status langsung (Sukses/Gagal) → tampilkan hasil
+      const msg = formatTransaction(result);
+
+      await ctx.reply(msg, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('💳 Cek Saldo', 'cmd_balance')],
+          [Markup.button.callback('🛒 Beli Lagi', 'cmd_buy')],
+          [Markup.button.callback('🏠 Menu Utama', 'cmd_start')],
+        ]),
+      });
+    }
   } catch (error) {
     console.error('Error transaksi:', error);
     await ctx.reply(
@@ -451,6 +545,11 @@ buyScene.action('cancel_buy', async (ctx) => {
     ...Markup.inlineKeyboard([[Markup.button.callback('🏠 Menu Utama', 'cmd_start')]]),
   });
   return ctx.scene.leave();
+});
+
+// ======== Handle noop (untuk tombol page indicator) ========
+buyScene.action('noop', async (ctx) => {
+  await ctx.answerCbQuery();
 });
 
 module.exports = buyScene;

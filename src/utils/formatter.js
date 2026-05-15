@@ -83,7 +83,7 @@ function formatTransaction(result) {
     msg += `\n💬 Pesan: ${escapeMarkdown(data.message)}\n`;
   }
 
-  msg += `\n⏰ Waktu: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}`;
+  msg += `\n⏰ Waktu: ${data.tgl ? new Date(data.tgl).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}`;
 
   return msg;
 }
