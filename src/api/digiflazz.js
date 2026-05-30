@@ -1,5 +1,7 @@
 const axios = require('axios');
 const md5 = require('md5');
+const fs = require('fs');
+const path = require('path');
 const config = require('../config');
 const cache = require('../utils/cache');
 
@@ -43,6 +45,7 @@ async function checkBalance() {
  */
 async function getPriceList(cmd = 'prepaid') {
   const cacheKey = `pricelist_${cmd}`;
+  const backupPath = path.join(__dirname, `../utils/backup_${cacheKey}.json`);
   const cached = cache.get(cacheKey);
 
   if (cached) {
@@ -60,8 +63,19 @@ async function getPriceList(cmd = 'prepaid') {
     });
 
     let products = [];
-    if (response.data && response.data.data) {
+    if (response.data && Array.isArray(response.data.data)) {
       products = response.data.data;
+      
+      // Simpan backup ke disk
+      try {
+        fs.writeFileSync(backupPath, JSON.stringify(products));
+      } catch (e) {
+        console.error('Gagal menyimpan backup pricelist:', e);
+      }
+    } else if (response.data && response.data.data) {
+      throw new Error(response.data.data.message || 'Respons tidak valid dari Digiflazz (bukan array)');
+    } else {
+      throw new Error('Format response tidak valid');
     }
 
     // Simpan ke cache
@@ -70,6 +84,21 @@ async function getPriceList(cmd = 'prepaid') {
 
     return products;
   } catch (error) {
+    // Jika gagal (seperti rate limit), coba baca dari backup
+    console.log('⚠️ Mengambil dari API gagal, mencoba menggunakan data backup...');
+    try {
+      if (fs.existsSync(backupPath)) {
+        const backupData = fs.readFileSync(backupPath, 'utf8');
+        const products = JSON.parse(backupData);
+        // Set ke cache lagi agar tidak spam baca file
+        cache.set(cacheKey, products, config.cacheTTL);
+        console.log(`♻️ Menggunakan data backup daftar harga (${cmd})`);
+        return products;
+      }
+    } catch (fallbackError) {
+      console.error('Gagal membaca data backup:', fallbackError);
+    }
+    
     if (error.response) {
       throw new Error(`Digiflazz Error: ${error.response.data?.data?.message || error.response.statusText}`);
     }

@@ -60,7 +60,7 @@ module.exports = (bot) => {
 
   bot.action('cmd_refresh', async (ctx) => {
     await ctx.answerCbQuery('🔄 Memperbarui cache...');
-    const cache = require('../utils/cache');
+    const cache = require('../../utils/cache');
     cache.clear();
     await ctx.reply('✅ Cache berhasil di-refresh! Data produk akan diambil ulang dari Digiflazz.');
   });
