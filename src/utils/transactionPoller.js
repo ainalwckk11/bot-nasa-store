@@ -40,7 +40,7 @@ class TransactionPoller {
       return;
     }
 
-    const { sku, customerNo, chatId } = pollData;
+    const { sku, customerNo, chatId, messageId } = pollData;
     const startTime = Date.now();
 
     console.log(`🔄 Mulai polling transaksi: ${refId}`);
@@ -73,27 +73,49 @@ class TransactionPoller {
           console.log(`✅ Transaksi sukses: ${refId}`);
 
           const msg = formatTransaction(result);
-          await this.bot.telegram.sendMessage(chatId, msg, {
+          const extra = {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
               [Markup.button.callback('💳 Cek Saldo', 'cmd_balance')],
               [Markup.button.callback('🛒 Beli Lagi', 'cmd_buy')],
               [Markup.button.callback('🏠 Menu Utama', 'cmd_start')],
             ]),
-          });
+          };
+
+          try {
+            if (messageId) {
+              await this.bot.telegram.editMessageText(chatId, messageId, null, msg, extra);
+            } else {
+              await this.bot.telegram.sendMessage(chatId, msg, extra);
+            }
+          } catch (err) {
+            console.error(`❌ Gagal update pesan sukses untuk ${refId}:`, err.message);
+            await this.bot.telegram.sendMessage(chatId, msg, extra).catch(e => console.error(e));
+          }
         } else if (status === 'Gagal') {
           this.stopPolling(refId);
           transactionStore.update(refId, { lastStatus: 'Gagal', result });
           console.log(`❌ Transaksi gagal: ${refId}`);
 
           const msg = formatTransaction(result);
-          await this.bot.telegram.sendMessage(chatId, msg, {
+          const extra = {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
               [Markup.button.callback('🛒 Beli Lagi', 'cmd_buy')],
               [Markup.button.callback('🏠 Menu Utama', 'cmd_start')],
             ]),
-          });
+          };
+
+          try {
+            if (messageId) {
+              await this.bot.telegram.editMessageText(chatId, messageId, null, msg, extra);
+            } else {
+              await this.bot.telegram.sendMessage(chatId, msg, extra);
+            }
+          } catch (err) {
+            console.error(`❌ Gagal update pesan gagal untuk ${refId}:`, err.message);
+            await this.bot.telegram.sendMessage(chatId, msg, extra).catch(e => console.error(e));
+          }
         }
         // Jika masih Pending, lanjutkan polling
       } catch (error) {

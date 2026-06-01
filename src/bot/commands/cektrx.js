@@ -64,16 +64,18 @@ async function handleCekTrx(ctx, refId) {
       statusText = 'Gagal';
     }
 
+    const sanitizeCode = (text) => text ? String(text).replace(/`/g, "'") : '-';
+
     let msg = `${statusEmoji} *CEK STATUS TRANSAKSI*\n━━━━━━━━━━━━━━━━━━━━\n\n`;
     msg += `📦 Produk: *${escapeMarkdown(data.product_name || storedTx.product?.product_name || '-')}*\n`;
-    msg += `🏷️ SKU: \`${data.buyer_sku_code || storedTx.sku || '-'}\`\n`;
-    msg += `📱 Tujuan: \`${data.customer_no || storedTx.customerNo || '-'}\`\n`;
+    msg += `🏷️ SKU: \`${sanitizeCode(data.buyer_sku_code || storedTx.sku)}\`\n`;
+    msg += `📱 Tujuan: \`${sanitizeCode(data.customer_no || storedTx.customerNo)}\`\n`;
     msg += `💰 Harga: *${formatCurrency(data.price || storedTx.product?.price)}*\n`;
     msg += `📊 Status: *${statusText}*\n`;
-    msg += `🔖 Ref ID: \`${data.ref_id || refId}\`\n`;
+    msg += `🔖 Ref ID: \`${sanitizeCode(data.ref_id || refId)}\`\n`;
 
     if (data.sn) {
-      msg += `\n🔑 *Serial Number (SN):*\n\`${data.sn}\`\n`;
+      msg += `\n🔑 *Serial Number (SN):*\n\`${sanitizeCode(data.sn)}\`\n`;
     }
 
     if (data.message) {
@@ -152,16 +154,18 @@ module.exports = (bot) => {
         statusText = 'Gagal';
       }
 
+      const sanitizeCode = (text) => text ? String(text).replace(/`/g, "'") : '-';
+
       let msg = `${statusEmoji} *CEK STATUS TRANSAKSI*\n━━━━━━━━━━━━━━━━━━━━\n\n`;
       msg += `📦 Produk: *${escapeMarkdown(data.product_name || storedTx.product?.product_name || '-')}*\n`;
-      msg += `🏷️ SKU: \`${data.buyer_sku_code || storedTx.sku || '-'}\`\n`;
-      msg += `📱 Tujuan: \`${data.customer_no || storedTx.customerNo || '-'}\`\n`;
+      msg += `🏷️ SKU: \`${sanitizeCode(data.buyer_sku_code || storedTx.sku)}\`\n`;
+      msg += `📱 Tujuan: \`${sanitizeCode(data.customer_no || storedTx.customerNo)}\`\n`;
       msg += `💰 Harga: *${formatCurrency(data.price || storedTx.product?.price)}*\n`;
       msg += `📊 Status: *${statusText}*\n`;
-      msg += `🔖 Ref ID: \`${data.ref_id || refId}\`\n`;
+      msg += `🔖 Ref ID: \`${sanitizeCode(data.ref_id || refId)}\`\n`;
 
       if (data.sn) {
-        msg += `\n🔑 *Serial Number (SN):*\n\`${data.sn}\`\n`;
+        msg += `\n🔑 *Serial Number (SN):*\n\`${sanitizeCode(data.sn)}\`\n`;
       }
 
       if (data.message) {

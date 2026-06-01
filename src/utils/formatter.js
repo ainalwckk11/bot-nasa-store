@@ -65,18 +65,20 @@ function formatTransaction(result) {
     statusText = 'Pending';
   }
 
+  const sanitizeCode = (text) => text ? String(text).replace(/`/g, "'") : '-';
+
   let msg = '';
   msg += `${statusEmoji} *HASIL TRANSAKSI*\n`;
   msg += `━━━━━━━━━━━━━━━━━━━━\n`;
   msg += `📦 Produk: ${escapeMarkdown(data.product_name || '-')}\n`;
-  msg += `🏷️ SKU: \`${data.buyer_sku_code || '-'}\`\n`;
-  msg += `📱 Tujuan: \`${data.customer_no || '-'}\`\n`;
+  msg += `🏷️ SKU: \`${sanitizeCode(data.buyer_sku_code)}\`\n`;
+  msg += `📱 Tujuan: \`${sanitizeCode(data.customer_no)}\`\n`;
   msg += `💰 Harga: *${formatCurrency(data.price)}*\n`;
   msg += `📊 Status: *${statusText}*\n`;
-  msg += `🔖 Ref ID: \`${data.ref_id || '-'}\`\n`;
+  msg += `🔖 Ref ID: \`${sanitizeCode(data.ref_id)}\`\n`;
 
   if (data.sn) {
-    msg += `\n🔑 *Serial Number (SN):*\n\`${data.sn}\`\n`;
+    msg += `\n🔑 *Serial Number (SN):*\n\`${sanitizeCode(data.sn)}\`\n`;
   }
 
   if (data.message) {
